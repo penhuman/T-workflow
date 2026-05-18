@@ -128,7 +128,7 @@
 
       // 渲染任務列表元件
       const TaskList = ({ tasks, type, newTaskText, setNewTaskText, onSubmit, placeholder }) => (
-        <div className="flex flex-col h-full">
+        <div className="flex-1 flex flex-col">
           <ul className="flex-1 space-y-3 mb-4">
             {tasks.map(task => (
               <li key={task.id} className="flex items-start group">
@@ -147,7 +147,7 @@
               </li>
             ))}
           </ul>
-          <form onSubmit={(e) => onSubmit(type, e)} className="relative mt-auto">
+          <form onSubmit={(e) => onSubmit(type, e)} className="relative mt-auto mb-2">
             <input
               type="text"
               value={newTaskText}
@@ -186,7 +186,7 @@
             {/* 倒 T 字法的上班半部：左右分隔 */}
             <div className="flex flex-col sm:flex-row min-h-[300px]">
               {/* 左邊：今天必做 */}
-              <div className="flex-1 p-8 sm:border-r-[3px] border-stone-800 border-b-[3px] sm:border-b-0">
+              <div className="flex-1 flex flex-col p-8 sm:border-r-[3px] border-stone-800 border-b-[3px] sm:border-b-0">
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative">
                   今天必做
                   <span className="text-xs bg-stone-800 text-white px-2 py-0.5 rounded-full">1-2件</span>
@@ -203,7 +203,7 @@
               </div>
 
               {/* 右邊：有空再做 */}
-              <div className="flex-1 p-8">
+              <div className="flex-1 flex flex-col p-8">
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative text-stone-600">
                   有空再做
                   <span className="text-xs border border-stone-400 text-stone-500 px-2 py-0.5 rounded-full">3-5件</span>
