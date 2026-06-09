@@ -20,29 +20,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
-  <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyDortz50K5erw_NEfQVu8FgMddCde_TFvw",
-    authDomain: "t-workflow-daily.firebaseapp.com",
-    projectId: "t-workflow-daily",
-    storageBucket: "t-workflow-daily.firebasestorage.app",
-    messagingSenderId: "548572301818",
-    appId: "1:548572301818:web:cbcc0e89b8acb01f557c43",
-    measurementId: "G-9Y5Y1SVHKK"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
   <div id="root"></div>
 
   <script type="text/babel">
@@ -108,12 +85,11 @@
     // 主應用程式
     // ==========================================
     function App() {
-      // 取得今天日期，並以 YYYY-MM-DD 作為 Firebase 的 Document ID
-      const today = new Date();
-      const docId = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const docRef = db.collection('dailyPlanners').doc(docId);
-      
-      const dateString = docId.replace(/-/g, '/');
+      // 輔助函數：取得今天的 YYYY-MM-DD 字串
+      const getTodayString = () => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      };
 
       // 建立空的預設時間表 (8點到18點)
       const getEmptySchedule = () => {
@@ -123,6 +99,7 @@
       };
 
       // 狀態管理
+      const [selectedDate, setSelectedDate] = useState(getTodayString()); // 新增：目前選取的日期
       const [mustDo, setMustDo] = useState([]);
       const [niceToDo, setNiceToDo] = useState([]);
       const [schedule, setSchedule] = useState(getEmptySchedule());
@@ -133,14 +110,22 @@
       const [isLoaded, setIsLoaded] = useState(false);
       const [saveStatus, setSaveStatus] = useState('連接中...');
 
-      // 1. 首次載入：從 Firebase 讀取今天的資料
+      // 1. 讀取資料：當選取日期 (selectedDate) 改變時，重新從 Firebase 抓取
       useEffect(() => {
-        docRef.get().then((doc) => {
+        setIsLoaded(false);
+        setSaveStatus('讀取中...');
+        
+        db.collection('dailyPlanners').doc(selectedDate).get().then((doc) => {
           if (doc.exists) {
             const data = doc.data();
             setMustDo(data.mustDo || []);
             setNiceToDo(data.niceToDo || []);
             setSchedule(data.schedule || getEmptySchedule());
+          } else {
+            // 如果該天沒有資料，重置為空白
+            setMustDo([]);
+            setNiceToDo([]);
+            setSchedule(getEmptySchedule());
           }
           setIsLoaded(true);
           setSaveStatus('已同步');
@@ -149,15 +134,15 @@
           setIsLoaded(true); 
           setSaveStatus('讀取失敗(請檢查資料庫規則)');
         });
-      }, []);
+      }, [selectedDate]); // 依賴項加入 selectedDate，日期一換就觸發
 
-      // 2. 自動存檔機制：防抖動 (Debounce) 設計，停頓 1 秒後上傳
+      // 2. 自動存檔機制：防抖動 (Debounce) 設計，停頓 1 秒後上傳到當前選取的日期
       useEffect(() => {
-        if (!isLoaded) return; // 還沒載入完不要觸發存檔
+        if (!isLoaded) return; // 還沒載入完不要觸發存檔，避免覆蓋舊資料
         
         setSaveStatus('同步中...');
         const timer = setTimeout(() => {
-          docRef.set({
+          db.collection('dailyPlanners').doc(selectedDate).set({
             mustDo,
             niceToDo,
             schedule,
@@ -172,7 +157,7 @@
 
         // 清除上一個計時器，避免頻繁寫入
         return () => clearTimeout(timer);
-      }, [mustDo, niceToDo, schedule, isLoaded]);
+      }, [mustDo, niceToDo, schedule, isLoaded, selectedDate]);
 
       // --- 處理功能 ---
       const toggleTask = (listType, id) => {
@@ -202,17 +187,12 @@
       };
 
       const resetPlanner = () => {
-        if (window.confirm('確定要清空今天的計畫表嗎？')) {
+        if (window.confirm('確定要清空這天的計畫表嗎？')) {
           setMustDo([]);
           setNiceToDo([]);
           setSchedule(getEmptySchedule());
         }
       };
-
-      // 載入畫面
-      if (!isLoaded) {
-        return <div className="min-h-screen bg-stone-100 flex items-center justify-center font-sans text-stone-500 text-lg">正在連接雲端資料庫...</div>;
-      }
 
       // 主畫面渲染
       return (
@@ -220,16 +200,24 @@
           <div className="w-full max-w-3xl bg-[#fcfbfa] shadow-2xl rounded-sm overflow-hidden relative border border-stone-200">
             
             {/* 頂部 Header */}
-            <div className="flex justify-between items-end px-8 pt-8 pb-4 border-b-[3px] border-stone-800">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end px-8 pt-8 pb-4 border-b-[3px] border-stone-800 gap-4 sm:gap-0">
               <div>
                 <h1 className="text-2xl font-bold tracking-wider text-stone-800 flex items-center gap-2">
                   <CalendarIcon size={24} />
-                  每日工作計畫 <span className="text-sm font-normal text-stone-500 ml-2">(倒 T 字法)</span>
+                  每日工作計畫 <span className="text-sm font-normal text-stone-500 ml-2 hidden sm:inline">(倒 T 字法)</span>
                 </h1>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-4 text-stone-600 font-medium">
-                  <span className="text-lg font-mono">{dateString}</span>
+              <div className="flex flex-col items-start sm:items-end gap-1 w-full sm:w-auto">
+                <div className="flex items-center gap-4 text-stone-600 font-medium w-full sm:w-auto justify-between sm:justify-end">
+                  
+                  {/* 日期選擇器 */}
+                  <input 
+                    type="date" 
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="text-lg font-mono bg-transparent border-b-2 border-transparent hover:border-stone-300 focus:border-stone-500 focus:outline-none transition-colors cursor-pointer py-1"
+                  />
+
                   <button onClick={resetPlanner} className="text-stone-400 hover:text-stone-800 transition-colors" title="清空計畫表">
                     <RotateCcwIcon size={18} />
                   </button>
@@ -241,69 +229,74 @@
               </div>
             </div>
 
-            {/* 倒 T 字法的上半部：左右分隔 */}
-            <div className="flex flex-col sm:flex-row min-h-[300px]">
+            {/* 若還在讀取中，可以加上透明度降低的視覺效果表示暫時無法操作 */}
+            <div className={`transition-opacity duration-300 ${!isLoaded ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
               
-              {/* 左邊：今天必做 */}
-              <div className="flex-1 flex flex-col p-8 sm:border-r-[3px] border-stone-800 border-b-[3px] sm:border-b-0">
-                <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative">
-                  今天必做
-                  <span className="text-xs bg-stone-800 text-white px-2 py-0.5 rounded-full">1-2件</span>
-                  <div className="absolute -bottom-2 left-0 w-16 h-1 bg-stone-300"></div>
-                </h2>
-                <TaskList 
-                  tasks={mustDo} 
-                  type="must" 
-                  newTaskText={newMustDo} 
-                  setNewTaskText={setNewMustDo} 
-                  onSubmit={addTask} 
-                  placeholder="新增必做事項..." 
-                  toggleTask={toggleTask} 
-                  deleteTask={deleteTask} 
-                />
+              {/* 倒 T 字法的上半部：左右分隔 */}
+              <div className="flex flex-col sm:flex-row min-h-[300px]">
+                
+                {/* 左邊：今天必做 */}
+                <div className="flex-1 flex flex-col p-8 sm:border-r-[3px] border-stone-800 border-b-[3px] sm:border-b-0">
+                  <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative">
+                    今天必做
+                    <span className="text-xs bg-stone-800 text-white px-2 py-0.5 rounded-full">1-2件</span>
+                    <div className="absolute -bottom-2 left-0 w-16 h-1 bg-stone-300"></div>
+                  </h2>
+                  <TaskList 
+                    tasks={mustDo} 
+                    type="must" 
+                    newTaskText={newMustDo} 
+                    setNewTaskText={setNewMustDo} 
+                    onSubmit={addTask} 
+                    placeholder="新增必做事項..." 
+                    toggleTask={toggleTask} 
+                    deleteTask={deleteTask} 
+                  />
+                </div>
+
+                {/* 右邊：有空再做 */}
+                <div className="flex-1 flex flex-col p-8">
+                  <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative text-stone-600">
+                    有空再做
+                    <span className="text-xs border border-stone-400 text-stone-500 px-2 py-0.5 rounded-full">3-5件</span>
+                    <div className="absolute -bottom-2 left-0 w-16 h-1 bg-stone-200"></div>
+                  </h2>
+                  <TaskList 
+                    tasks={niceToDo} 
+                    type="nice" 
+                    newTaskText={newNiceToDo} 
+                    setNewTaskText={setNewNiceToDo} 
+                    onSubmit={addTask} 
+                    placeholder="新增次要事項..." 
+                    toggleTask={toggleTask} 
+                    deleteTask={deleteTask} 
+                  />
+                </div>
               </div>
 
-              {/* 右邊：有空再做 */}
-              <div className="flex-1 flex flex-col p-8">
-                <h2 className="text-xl font-bold mb-6 flex items-center gap-2 relative text-stone-600">
-                  有空再做
-                  <span className="text-xs border border-stone-400 text-stone-500 px-2 py-0.5 rounded-full">3-5件</span>
-                  <div className="absolute -bottom-2 left-0 w-16 h-1 bg-stone-200"></div>
-                </h2>
-                <TaskList 
-                  tasks={niceToDo} 
-                  type="nice" 
-                  newTaskText={newNiceToDo} 
-                  setNewTaskText={setNewNiceToDo} 
-                  onSubmit={addTask} 
-                  placeholder="新增次要事項..." 
-                  toggleTask={toggleTask} 
-                  deleteTask={deleteTask} 
-                />
-              </div>
-            </div>
-
-            {/* 倒 T 字法的下半部：時間軸 */}
-            <div className="border-t-[3px] border-stone-800 bg-[#fdfbf9] p-8">
-              <div className="max-w-xl mx-auto space-y-1">
-                {Object.keys(schedule).map((hour) => (
-                  <div key={hour} className="flex items-start group">
-                    <div className="w-16 flex-shrink-0 flex items-center justify-end pr-4 py-3 relative border-r-2 border-stone-300 text-stone-500 font-bold font-mono text-lg">
-                      {hour}
-                      <div className="absolute right-[-2px] top-1/2 w-3 h-0.5 bg-stone-300 -translate-y-1/2"></div>
+              {/* 倒 T 字法的下半部：時間軸 */}
+              <div className="border-t-[3px] border-stone-800 bg-[#fdfbf9] p-8">
+                <div className="max-w-xl mx-auto space-y-1">
+                  {Object.keys(schedule).map((hour) => (
+                    <div key={hour} className="flex items-start group">
+                      <div className="w-16 flex-shrink-0 flex items-center justify-end pr-4 py-3 relative border-r-2 border-stone-300 text-stone-500 font-bold font-mono text-lg">
+                        {hour}
+                        <div className="absolute right-[-2px] top-1/2 w-3 h-0.5 bg-stone-300 -translate-y-1/2"></div>
+                      </div>
+                      <div className="flex-1 pl-6 py-2">
+                        <input 
+                          type="text" 
+                          value={schedule[hour]} 
+                          onChange={(e) => handleScheduleChange(hour, e.target.value)} 
+                          placeholder="點擊輸入工作安排..." 
+                          className="w-full bg-transparent text-lg border-b border-transparent hover:border-stone-200 focus:border-stone-400 focus:outline-none transition-colors py-1 text-stone-700" 
+                        />
+                      </div>
                     </div>
-                    <div className="flex-1 pl-6 py-2">
-                      <input 
-                        type="text" 
-                        value={schedule[hour]} 
-                        onChange={(e) => handleScheduleChange(hour, e.target.value)} 
-                        placeholder="點擊輸入工作安排..." 
-                        className="w-full bg-transparent text-lg border-b border-transparent hover:border-stone-200 focus:border-stone-400 focus:outline-none transition-colors py-1 text-stone-700" 
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+              
             </div>
 
           </div>
